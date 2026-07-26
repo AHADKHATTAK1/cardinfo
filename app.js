@@ -160,8 +160,10 @@ function obFinish() {
 }
 
 // ── APP NAV ──────────────────────────────────────────────────────
+const ALL_PAGES = ['wallet', 'scan', 'orgs', 'dashboard', 'analytics', 'directory', 'gates', 'security', 'batch', 'notifications', 'developer', 'settings'];
+
 function appNav(page) {
-  ['wallet', 'scan', 'orgs', 'dashboard'].forEach(p => {
+  ALL_PAGES.forEach(p => {
     [`dnav-${p}`, `mnav-${p}`].forEach(id => {
       document.getElementById(id)?.classList.toggle('active', p === page);
     });
@@ -172,17 +174,25 @@ function appNav(page) {
 
 function renderInnerPage(page) {
   state.currentInnerPage = page;
-  ['wallet', 'scan', 'orgs', 'dashboard'].forEach(p => {
+  ALL_PAGES.forEach(p => {
     [`dnav-${p}`, `mnav-${p}`].forEach(id => {
       document.getElementById(id)?.classList.toggle('active', p === page);
     });
   });
   const body = document.getElementById('app-body');
   if (!body) return;
-  if (page === 'wallet')    { body.innerHTML = buildWalletHTML(); wireWalletEvents(); }
-  if (page === 'scan')      body.innerHTML = buildScanHTML();
-  if (page === 'orgs')      body.innerHTML = buildOrgsHTML();
-  if (page === 'dashboard') body.innerHTML = buildDashboardHTML();
+  if (page === 'wallet')        { body.innerHTML = buildWalletHTML(); wireWalletEvents(); }
+  if (page === 'scan')          body.innerHTML = buildScanHTML();
+  if (page === 'orgs')          body.innerHTML = buildOrgsHTML();
+  if (page === 'dashboard')     body.innerHTML = buildDashboardHTML();
+  if (page === 'analytics')     body.innerHTML = buildAnalyticsHTML();
+  if (page === 'directory')     body.innerHTML = buildDirectoryHTML();
+  if (page === 'gates')         body.innerHTML = buildGatesHTML();
+  if (page === 'security')      body.innerHTML = buildSecurityHTML();
+  if (page === 'batch')         body.innerHTML = buildBatchHTML();
+  if (page === 'notifications') body.innerHTML = buildNotificationsHTML();
+  if (page === 'developer')     body.innerHTML = buildDeveloperHTML();
+  if (page === 'settings')      body.innerHTML = buildSettingsHTML();
 }
 
 // ══════════════════════════════════════════════
@@ -197,6 +207,7 @@ function buildWalletHTML() {
       ${buildCardHTML(primary, true)}
       <div class="card-actions" style="justify-content:center;flex-wrap:wrap;">
         <button class="card-action-btn primary" onclick="launchDemoScan('${primary.id}')"><i class="fa-solid fa-wifi"></i> NFC Scan</button>
+        <button class="card-action-btn" style="background:linear-gradient(135deg,rgba(0,0,0,.7),rgba(30,30,30,.8));border-color:rgba(255,255,255,.2);color:#fff;" onclick="openWalletShare('${primary.id}')"><i class="fa-brands fa-apple"></i> / <span style="color:#4285f4;font-weight:900;font-size:.8rem;">G</span> Add to Wallet</button>
         <button class="card-action-btn" onclick="flipCard('${primary.id}')"><i class="fa-solid fa-rotate"></i> Flip</button>
         <button class="card-action-btn" onclick="openCardDetail('${primary.id}')"><i class="fa-solid fa-circle-info"></i> Details</button>
         <button class="card-action-btn danger" onclick="deleteCard('${primary.id}')"><i class="fa-solid fa-trash"></i></button>
@@ -900,3 +911,931 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sub
 function generateId() { return 'ID-' + Math.random().toString(36).substr(2, 8).toUpperCase(); }
 function esc(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function infoField(label, value) { return `<div class="detail-field"><div class="detail-field-label">${label}</div><div class="detail-field-value">${esc(String(value))}</div></div>`; }
+
+// ══════════════════════════════════════════════
+// ADD TO WALLET — Main entry point
+// ══════════════════════════════════════════════
+let _walletCard = null; // card currently in wallet share modal
+
+function openWalletShare(cardId) {
+  const card = state.cards.find(c => c.id === cardId);
+  if (!card) return;
+  _walletCard = card;
+  const theme = COLOR_THEMES[card.colorIdx] || COLOR_THEMES[0];
+
+  // Mini card preview
+  document.getElementById('wshare-card-preview').innerHTML = `
+    <div class="wshare-mini-card">
+      <div class="pc-bg" style="background:${theme.gradient}"></div>
+      <div class="pc-content">
+        <div class="pc-top">
+          <span class="pc-logo" style="font-size:1.3rem;">${card.logoDataUrl ? `<img src="${card.logoDataUrl}" style="width:22px;height:22px;object-fit:contain;"/>` : card.icon}</span>
+          <i class="fa-solid fa-wifi" style="opacity:.6;font-size:.8rem;"></i>
+        </div>
+        <div style="font-family:'Outfit',sans-serif;font-weight:700;font-size:.9rem;">${esc(card.holderName)}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-size:.62rem;opacity:.55;letter-spacing:1px;">${esc(card.idNumber)}</div>
+          <div style="font-size:.72rem;opacity:.7;">${esc(card.orgName)}</div>
+        </div>
+      </div>
+    </div>`;
+
+  openModal('wallet-share-modal');
+}
+
+// ══════════════════════════════════════════════
+// APPLE WALLET — Generate .pkpass file
+// ══════════════════════════════════════════════
+async function addToAppleWallet() {
+  const card = _walletCard;
+  if (!card) return;
+
+  showToast('⏳ Generating Apple Wallet pass…', 'info');
+
+  try {
+    // Build pass.json — Apple Wallet Generic Pass format
+    const passJson = {
+      formatVersion: 1,
+      passTypeIdentifier: 'pass.com.vaultid.idcard',
+      serialNumber: card.idNumber,
+      teamIdentifier: 'VAULTID001',
+      webServiceURL: 'https://vaultid.app/api/',
+      authenticationToken: btoa(card.id).slice(0, 16),
+      organizationName: card.orgName,
+      description: `${card.cardType} — ${card.orgName}`,
+      logoText: card.orgName,
+      foregroundColor: 'rgb(255,255,255)',
+      backgroundColor: 'rgb(30,27,75)',
+      labelColor: 'rgb(200,180,255)',
+      generic: {
+        primaryFields: [
+          { key: 'name', label: 'NAME', value: card.holderName }
+        ],
+        secondaryFields: [
+          { key: 'id',   label: 'ID NUMBER', value: card.idNumber },
+          { key: 'dept', label: 'DEPARTMENT', value: card.role }
+        ],
+        auxiliaryFields: [
+          { key: 'org',  label: 'ORGANIZATION', value: card.orgName },
+          { key: 'type', label: 'CARD TYPE',     value: card.cardType }
+        ],
+        backFields: [
+          { key: 'email',   label: 'Email',   value: card.email   || 'N/A' },
+          { key: 'expiry',  label: 'Expires', value: card.expiry  || 'N/A' },
+          { key: 'website', label: 'Website', value: card.website || 'vaultid.app' },
+          { key: 'info',    label: 'About',   value: 'This is a VaultID digital identity card. Verify with NFC or QR code.' }
+        ]
+      },
+      barcode: {
+        message: JSON.stringify({ id: card.id, name: card.holderName, org: card.orgName, idNo: card.idNumber }),
+        format: 'PKBarcodeFormatQR',
+        messageEncoding: 'iso-8859-1',
+        altText: card.idNumber
+      }
+    };
+
+    const passStr = JSON.stringify(passJson, null, 2);
+
+    // Build manifest (normally needs SHA1 hash of each file — simplified here)
+    const manifest = {
+      'pass.json': await sha1(passStr)
+    };
+
+    // Use JSZip to build .pkpass (ZIP)
+    if (typeof JSZip === 'undefined') {
+      // Fallback: just download pass.json
+      downloadBlob(new Blob([passStr], { type: 'application/json' }), `${card.holderName.replace(/\s/g,'-')}-vaultid.pass.json`);
+      showToast('📥 Pass file downloaded! Open on iPhone to add to Wallet.', 'success');
+      return;
+    }
+
+    const zip = new JSZip();
+    zip.file('pass.json',     passStr);
+    zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+    zip.file('signature',     'VAULTID_UNSIGNED_DEMO'); // real: Apple cert signature
+
+    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.apple.pkpass' });
+    downloadBlob(blob, `${card.holderName.replace(/\s+/g, '-')}-VaultID.pkpass`);
+
+    setTimeout(() => {
+      showToast('✅ .pkpass downloaded! AirDrop to iPhone → tap to Add to Wallet', 'success');
+    }, 500);
+
+    addActivity(`Apple Wallet pass: ${card.holderName}`, 'blue');
+
+  } catch (e) {
+    showToast('⚠️ Could not generate pass. Try "Share Card" instead.', 'error');
+  }
+}
+
+// SHA-1 hash (for pass manifest)
+async function sha1(str) {
+  try {
+    const buf = new TextEncoder().encode(str);
+    const hash = await crypto.subtle.digest('SHA-1', buf);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+  } catch (e) { return 'unsigned'; }
+}
+
+// ══════════════════════════════════════════════
+// GOOGLE WALLET — Save to Google Wallet link
+// ══════════════════════════════════════════════
+function addToGoogleWallet() {
+  const card = _walletCard;
+  if (!card) return;
+
+  // Google Wallet Generic Pass JWT payload
+  const jwtPayload = {
+    iss: 'vaultid@vaultid-app.iam.gserviceaccount.com',
+    aud: 'google',
+    typ: 'savetowallet',
+    iat: Math.floor(Date.now() / 1000),
+    payload: {
+      genericObjects: [{
+        id: `3388000000022795563.${card.idNumber.replace(/[^a-zA-Z0-9_]/g,'')}`,
+        classId: '3388000000022795563.VaultID_Generic',
+        genericType: 'GENERIC_TYPE_UNSPECIFIED',
+        hexBackgroundColor: '#1e1b4b',
+        logo: { sourceUri: { uri: 'https://vaultid.app/icons/icon-192.png' } },
+        cardTitle: { defaultValue: { language: 'en-US', value: 'VaultID' } },
+        subheader: { defaultValue: { language: 'en-US', value: card.cardType } },
+        header: { defaultValue: { language: 'en-US', value: card.holderName } },
+        textModulesData: [
+          { id: 'org',  header: 'Organization', body: card.orgName },
+          { id: 'id',   header: 'ID Number',    body: card.idNumber },
+          { id: 'dept', header: 'Department',   body: card.role },
+        ],
+        barcode: {
+          type: 'QR_CODE',
+          value: JSON.stringify({ id: card.id, name: card.holderName, org: card.orgName }),
+          alternateText: card.idNumber,
+        },
+        validTimeInterval: {
+          start: { date: new Date().toISOString() },
+          end:   { date: card.expiry ? card.expiry + 'T23:59:59Z' : '2030-12-31T23:59:59Z' }
+        }
+      }]
+    }
+  };
+
+  // Base64-encode the payload and create the Save link
+  const encoded = btoa(JSON.stringify(jwtPayload));
+  const saveUrl = `https://pay.google.com/gp/v/save/${encoded}`;
+
+  // Open in new tab (on real device it opens Google Wallet)
+  window.open(saveUrl, '_blank');
+
+  showToast('🟢 Opening Google Wallet save page…', 'success');
+  addActivity(`Google Wallet: ${card.holderName}`, 'green');
+
+  setTimeout(() => {
+    showToast('📱 On Android: tap "Save to Google Wallet" in the opened page', 'info');
+  }, 2000);
+}
+
+// ══════════════════════════════════════════════
+// PWA INSTALL
+// ══════════════════════════════════════════════
+async function installPWA() {
+  if (window._pwaPrompt) {
+    try {
+      window._pwaPrompt.prompt();
+      const { outcome } = await window._pwaPrompt.userChoice;
+      if (outcome === 'accepted') {
+        showToast('🎉 VaultID installed on your home screen!', 'success');
+        addActivity('App installed to home screen', 'purple');
+        closeModal('wallet-share-modal');
+      }
+    } catch (e) {}
+    return;
+  }
+
+  // iOS Safari instructions (no beforeinstallprompt support)
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (isIOS) {
+    showToast('On iPhone: tap Share ↑ → "Add to Home Screen"', 'info');
+    setTimeout(() => showToast('The VaultID icon will appear on your home screen', 'info'), 2500);
+  } else {
+    showToast('ℹ️ Open this page in Chrome/Edge → menu → "Install App"', 'info');
+  }
+}
+
+// Show PWA install banner automatically
+function showPWABanner() {
+  if (document.getElementById('pwa-banner')) return; // already shown
+  const b = document.createElement('div');
+  b.className = 'pwa-banner'; b.id = 'pwa-banner';
+  b.innerHTML = `
+    <div class="pwa-banner-icon">⬡</div>
+    <div class="pwa-banner-text">
+      <strong>Install VaultID</strong>
+      <span>Add to home screen — works offline</span>
+    </div>
+    <button class="pwa-banner-btn" onclick="installPWA();document.getElementById('pwa-banner').remove();">Install</button>
+    <button class="pwa-banner-close" onclick="this.closest('.pwa-banner').remove()"><i class="fa-solid fa-xmark"></i></button>`;
+  document.body.appendChild(b);
+  setTimeout(() => b.classList.add('show'), 100);
+  setTimeout(() => { b.classList.remove('show'); setTimeout(() => b.remove(), 500); }, 10000);
+}
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); window._pwaPrompt = e;
+  setTimeout(showPWABanner, 3000);
+});
+
+// ══════════════════════════════════════════════
+// DOWNLOAD CARD AS IMAGE (SVG → PNG)
+// ══════════════════════════════════════════════
+function downloadCardImage() {
+  const card = _walletCard;
+  if (!card) return;
+  const theme = COLOR_THEMES[card.colorIdx] || COLOR_THEMES[0];
+
+  // Build card as SVG foreignObject → PNG via canvas
+  const svgStr = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="600" height="380">
+    <defs>
+      <linearGradient id="cg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%"   stop-color="${gradientStart(card.colorIdx)}"/>
+        <stop offset="50%"  stop-color="${gradientMid(card.colorIdx)}"/>
+        <stop offset="100%" stop-color="${gradientEnd(card.colorIdx)}"/>
+      </linearGradient>
+      <clipPath id="rr"><rect width="600" height="380" rx="32" ry="32"/></clipPath>
+    </defs>
+    <!-- Card background -->
+    <rect width="600" height="380" fill="url(#cg)" rx="32" ry="32"/>
+    <rect width="600" height="380" fill="rgba(0,0,0,0.2)" rx="32" ry="32" clip-path="url(#rr)"/>
+
+    <!-- Logo box -->
+    <rect x="30" y="30" width="70" height="70" fill="rgba(255,255,255,0.15)" rx="16"/>
+    <text x="65" y="75" font-size="32" text-anchor="middle">${card.icon}</text>
+
+    <!-- NFC icon -->
+    <text x="560" y="65" font-size="26" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-family="Arial">⊛</text>
+
+    <!-- VaultID brand -->
+    <text x="560" y="40" font-size="14" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-family="Arial">VaultID</text>
+
+    <!-- Name -->
+    <text x="30" y="180" font-size="32" font-weight="bold" fill="white" font-family="Arial, sans-serif">${escSVG(card.holderName)}</text>
+
+    <!-- Role & Card Type -->
+    <text x="30" y="215" font-size="18" fill="rgba(255,255,255,0.75)" font-family="Arial">${escSVG(card.cardType)} · ${escSVG(card.role)}</text>
+
+    <!-- Org name -->
+    <text x="30" y="248" font-size="16" fill="rgba(255,255,255,0.6)" font-family="Arial">${escSVG(card.orgName)}</text>
+
+    <!-- Divider -->
+    <line x1="30" y1="270" x2="570" y2="270" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+
+    <!-- ID Number -->
+    <text x="30"  y="305" font-size="14" fill="rgba(255,255,255,0.5)" font-family="monospace" letter-spacing="3">ID: ${escSVG(card.idNumber)}</text>
+
+    <!-- Expiry -->
+    ${card.expiry ? `<text x="30" y="330" font-size="13" fill="rgba(255,255,255,0.4)" font-family="Arial">EXPIRES: ${escSVG(card.expiry)}</text>` : ''}
+
+    <!-- Chip -->
+    <rect x="500" y="285" width="60" height="44" fill="#f59e0b" rx="6" opacity="0.9"/>
+    <rect x="506" y="291" width="48" height="32" fill="#fcd34d" rx="4"/>
+    <rect x="524" y="300" width="14" height="14" fill="none" stroke="rgba(0,0,0,0.2)" stroke-width="2" rx="2"/>
+
+    <!-- VaultID watermark -->
+    <text x="570" y="370" font-size="11" text-anchor="end" fill="rgba(255,255,255,0.25)" font-family="Arial">Powered by VaultID</text>
+  </svg>`;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 600; canvas.height = 380;
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  const svg64 = btoa(unescape(encodeURIComponent(svgStr)));
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0);
+    canvas.toBlob(blob => {
+      downloadBlob(blob, `${card.holderName.replace(/\s+/g,'-')}-VaultID-Card.png`);
+      showToast('📥 Card image downloaded!', 'success');
+      addActivity(`Downloaded card image: ${card.holderName}`, 'green');
+    }, 'image/png');
+  };
+  img.src = 'data:image/svg+xml;base64,' + svg64;
+}
+
+function gradientStart(idx) { const g = [['#1e1b4b','#0c4a6e','#052e16','#4c0519','#451a03','#0f172a','#2e1065','#042f2e','#7f1d1d','#172554','#3b0764','#1a2e05']]; return (g[0]||[])[idx] || '#1e1b4b'; }
+function gradientMid(idx)   { const g = [['#312e81','#075985','#14532d','#881337','#78350f','#1e293b','#4c1d95','#134e4a','#991b1b','#1e3a8a','#6b21a8','#365314']]; return (g[0]||[])[idx] || '#312e81'; }
+function gradientEnd(idx)   { const g = [['#4c1d95','#0369a1','#166534','#9f1239','#92400e','#334155','#6d28d9','#115e59','#b45309','#1d4ed8','#7c3aed','#3f6212']]; return (g[0]||[])[idx] || '#4c1d95'; }
+function escSVG(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;'); }
+
+// ══════════════════════════════════════════════
+// SHARE CARD (Web Share API)
+// ══════════════════════════════════════════════
+async function shareCard() {
+  const card = _walletCard;
+  if (!card) return;
+
+  const shareData = {
+    title: `${card.holderName} — ${card.cardType}`,
+    text:  `My ${card.cardType} from ${card.orgName}\nID: ${card.idNumber}\n\nVerify with VaultID: https://vaultid.app`,
+    url:   `https://vaultid.app/verify?id=${encodeURIComponent(card.idNumber)}&org=${encodeURIComponent(card.orgName)}`
+  };
+
+  if (navigator.share) {
+    try {
+      await navigator.share(shareData);
+      showToast('✅ Card shared!', 'success');
+      addActivity(`Shared: ${card.holderName}`, 'blue');
+    } catch (e) {
+      if (e.name !== 'AbortError') copyToClipboard(shareData.text);
+    }
+  } else {
+    copyToClipboard(shareData.text);
+  }
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard?.writeText(text).then(() => {
+    showToast('📋 Card info copied to clipboard!', 'success');
+  }).catch(() => {
+    showToast('Share: copy the URL from your browser bar', 'info');
+  });
+}
+
+// ══════════════════════════════════════════════
+// DOWNLOAD BLOB HELPER
+// ══════════════════════════════════════════════
+// ══════════════════════════════════════════════
+// FAQ ACCORDION
+// ══════════════════════════════════════════════
+function toggleFaq(el) {
+  const isOpen = el.classList.contains('open');
+  document.querySelectorAll('.faq-item').forEach(item => item.classList.remove('open'));
+  if (!isOpen) el.classList.add('open');
+}
+
+// ══════════════════════════════════════════════
+// LIVE ID LOOKUP / VERIFIER SIMULATOR
+// ══════════════════════════════════════════════
+function quickVerify(idNum) {
+  const inp = document.getElementById('verifier-input');
+  if (inp) inp.value = idNum;
+  runInstantVerify();
+}
+
+function runInstantVerify() {
+  const inp = document.getElementById('verifier-input');
+  const query = (inp?.value || '').trim().toUpperCase();
+  const resCard = document.getElementById('verifier-result-card');
+  if (!resCard) return;
+
+  if (!query) {
+    showToast('Please enter an ID number to verify', 'info');
+    return;
+  }
+
+  // Match in state cards or demo cards
+  const match = state.cards.find(c => c.idNumber.toUpperCase().includes(query) || query.includes(c.idNumber.toUpperCase())) ||
+                { holderName: 'Alex Johnson', orgName: 'MIT University', cardType: 'Student ID', role: 'Computer Science', idNumber: query, expiry: '2028-06-30' };
+
+  resCard.style.display = 'block';
+  resCard.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;border-bottom:1px solid rgba(16,185,129,.2);padding-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="width:10px;height:10px;border-radius:50%;background:var(--accent-green);box-shadow:0 0 10px var(--accent-green);"></span>
+        <strong style="color:var(--accent-green);font-size:.95rem;">VERIFIED VALID CREDENTIAL</strong>
+      </div>
+      <span style="font-size:.72rem;color:var(--text-muted);">${new Date().toLocaleTimeString()}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;">
+      ${dsoField('Holder Name', match.holderName)}
+      ${dsoField('ID Number', match.idNumber)}
+      ${dsoField('Organization', match.orgName)}
+      ${dsoField('Card Type', match.cardType)}
+      ${dsoField('Department', match.role)}
+      ${dsoField('Security Status', '✅ Active & Authenticated')}
+    </div>`;
+
+  showToast(`✅ Verified: ${match.holderName} (${match.orgName})`, 'success');
+}
+
+// ══════════════════════════════════════════════
+// PAGE 1: SECURITY & AUDIT CENTER
+// ══════════════════════════════════════════════
+function buildSecurityHTML() {
+  const auditLogs = [
+    { type: 'NFC Scan', user: 'Alex Johnson (MIT)', status: 'Verified', ip: '192.168.1.42', gate: 'Main Entrance Gate #1', time: '1 min ago', ok: true },
+    { type: 'QR Scan',  user: 'Sarah Chen (TechCorp)', status: 'Verified', ip: '10.0.4.12', gate: 'Lobby Turnstile B', time: '4 mins ago', ok: true },
+    { type: 'NFC Scan', user: 'Unknown Device', status: 'Denied (Expired)', ip: '172.16.0.88', gate: 'Server Room Gate #4', time: '12 mins ago', ok: false },
+    { type: 'Card Issued', user: 'Dr. Malik Patel (Hospital)', status: 'Issued', ip: '192.168.1.100', gate: 'Admin Console', time: '1 hour ago', ok: true },
+    { type: 'NFC Scan', user: 'Alex Johnson (MIT)', status: 'Verified', ip: '192.168.1.42', gate: 'Library Gate', time: '2 hours ago', ok: true },
+  ];
+
+  return `
+    <div class="inner-page-wrap">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">🛡️ Security &amp; Audit Center</h2>
+          <p class="section-subtitle">Real-time threat monitoring, access logs &amp; device sessions</p>
+        </div>
+        <button class="card-action-btn danger" onclick="showToast('🚨 All wallet sessions locked down', 'error')"><i class="fa-solid fa-lock"></i> Lockdown Wallet</button>
+      </div>
+
+      <!-- Security Status KPIs -->
+      <div class="dashboard-grid">
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon">🟢</div>
+          <div class="dash-stat-value" style="color:var(--accent-green);">Optimal</div>
+          <div class="dash-stat-label">Security Status</div>
+          <div class="dash-stat-change">Zero active anomalies</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon">📡</div>
+          <div class="dash-stat-value">${state.scanCount + 42}</div>
+          <div class="dash-stat-label">Total Verification Checks</div>
+          <div class="dash-stat-change">100% encrypted payloads</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon">🚫</div>
+          <div class="dash-stat-value" style="color:var(--accent-orange);">1</div>
+          <div class="dash-stat-label">Access Denied Attempt</div>
+          <div class="dash-stat-change">Blocked at Server Room</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon">📱</div>
+          <div class="dash-stat-value">3</div>
+          <div class="dash-stat-label">Active Wallet Sessions</div>
+          <div class="dash-stat-change">Apple Wallet &amp; PWA</div>
+        </div>
+      </div>
+
+      <!-- Audit Logs Table -->
+      <div class="dash-panel" style="margin-top:20px;">
+        <div class="dash-panel-title">Real-Time Access Audit Logs</div>
+        <div style="overflow-x:auto;">
+          <table class="sub-table">
+            <thead>
+              <tr><th>Event</th><th>Identity / User</th><th>Gate / Terminal</th><th>IP Address</th><th>Time</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              ${auditLogs.map(l => `
+                <tr>
+                  <td><strong>${l.type}</strong></td>
+                  <td>${esc(l.user)}</td>
+                  <td>${esc(l.gate)}</td>
+                  <td style="font-family:monospace;">${l.ip}</td>
+                  <td style="color:var(--text-muted);">${l.time}</td>
+                  <td><span class="plan-chip" style="background:${l.ok ? 'rgba(16,185,129,.15)' : 'rgba(239,68,68,.15)'};color:${l.ok ? 'var(--accent-green)' : '#f87171'};">${l.status}</span></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════
+// PAGE 2: BULK CSV CARD ISSUER
+// ══════════════════════════════════════════════
+function buildBatchHTML() {
+  return `
+    <div class="inner-page-wrap">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">📦 Bulk Batch Card Issuer</h2>
+          <p class="section-subtitle">Import CSV / Excel spreadsheet to issue hundreds of ID cards at once</p>
+        </div>
+        <button class="btn-cta" onclick="downloadSampleCSV()"><i class="fa-solid fa-download"></i> Sample CSV</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <!-- Upload Box -->
+        <div class="dash-panel">
+          <div class="dash-panel-title">1. Upload Member Roster</div>
+          <div class="upload-area" style="padding:40px 20px;" onclick="simulateCSVUpload()">
+            <div class="upload-icon" style="font-size:2.5rem;color:var(--accent-purple);"><i class="fa-solid fa-file-csv"></i></div>
+            <div style="font-weight:700;font-size:1rem;margin-top:8px;">Drag &amp; Drop CSV File</div>
+            <div class="upload-text" style="margin-top:4px;">Supports .csv, .xlsx (Name, Role, ID, Email, Org)</div>
+          </div>
+          <button class="btn-submit" onclick="simulateCSVUpload()" style="margin-top:16px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Auto-Generate 5 Demo Cards</button>
+        </div>
+
+        <!-- Instructions Box -->
+        <div class="dash-panel">
+          <div class="dash-panel-title">2. CSV Column Mapping Standard</div>
+          <div style="font-size:.82rem;color:var(--text-secondary);line-height:1.7;">
+            <p>Your spreadsheet should contain the following column headers:</p>
+            <ul style="margin:10px 0 16px 20px;display:flex;flex-direction:column;gap:6px;">
+              <li><code>holderName</code> — Full name of member</li>
+              <li><code>idNumber</code> — Unique ID or Registration No.</li>
+              <li><code>role</code> — Department or Title (e.g. Student)</li>
+              <li><code>cardType</code> — Student ID / Employee ID</li>
+              <li><code>email</code> — Member email address for auto-delivery</li>
+            </ul>
+            <div style="padding:10px;background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.2);border-radius:8px;color:var(--accent-purple);">
+              ⚡ Multi-issuance automatically triggers Apple/Google Wallet pass email notifications to all members!
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Batch Preview Section -->
+      <div id="batch-progress-section" style="display:none;margin-top:24px;" class="dash-panel">
+        <div class="dash-panel-title">Batch Issuance Progress</div>
+        <div class="dso-progress-bar" style="height:8px;margin-bottom:12px;"><div class="dso-progress-fill" id="batch-fill" style="width:0%;"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:.84rem;">
+          <span id="batch-status-text">Processing batch file...</span>
+          <strong id="batch-count-text">0 / 5 Issued</strong>
+        </div>
+      </div>
+    </div>`;
+}
+
+function downloadSampleCSV() {
+  const csvContent = "holderName,idNumber,role,cardType,email,orgName\nEmma Watson,STU-9901,Computer Science,Student ID,emma@mit.edu,MIT University\nJames Bond,EMP-007,Field Agent,Employee ID,bond@mi6.gov,MI6 Agency\nDr. John Watson,DOC-102,Surgeon,Employee ID,watson@hospital.org,City Hospital";
+  downloadBlob(new Blob([csvContent], { type: 'text/csv' }), 'vaultid_sample_roster.csv');
+  showToast('📥 Sample CSV template downloaded!', 'success');
+}
+
+function simulateCSVUpload() {
+  const sec = document.getElementById('batch-progress-section');
+  const fill = document.getElementById('batch-fill');
+  const stText = document.getElementById('batch-status-text');
+  const cntText = document.getElementById('batch-count-text');
+  if (!sec) return;
+
+  sec.style.display = 'block';
+  fill.style.width = '0%';
+  showToast('⚡ Processing CSV file...', 'info');
+
+  const demoBatch = [
+    { holderName: 'Emma Watson', orgName: 'MIT University', role: 'Computer Science', idNumber: 'STU-9901', cardType: 'Student ID', colorIdx: 0, icon: '🎓' },
+    { holderName: 'James Bond', orgName: 'MI6 Agency', role: 'Field Agent', idNumber: 'EMP-007', cardType: 'Employee ID', colorIdx: 9, icon: '🏛️' },
+    { holderName: 'Dr. John Watson', orgName: 'City Hospital', role: 'Surgeon', idNumber: 'DOC-102', cardType: 'Employee ID', colorIdx: 2, icon: '🏥' },
+    { holderName: 'Sophia Loren', orgName: 'Global Bank', role: 'Finance Director', idNumber: 'BNK-404', cardType: 'Employee ID', colorIdx: 1, icon: '🏦' },
+    { holderName: 'Lucas Croft', orgName: 'Oxford Tech', role: 'Research Fellow', idNumber: 'OXF-771', cardType: 'Faculty ID', colorIdx: 10, icon: '🔬' },
+  ];
+
+  let step = 0;
+  const interval = setInterval(() => {
+    step++;
+    const pct = Math.round((step / 5) * 100);
+    fill.style.width = pct + '%';
+    stText.textContent = `Issuing card for ${demoBatch[step-1].holderName}...`;
+    cntText.textContent = `${step} / 5 Issued`;
+
+    // Add card to wallet
+    state.cards.push({ id: uid(), flipped: false, createdAt: new Date().toISOString(), logoDataUrl: null, email: '', expiry: '2028-12-31', issue: '2024-01-01', website: '', address: '', phone: '', ...demoBatch[step-1] });
+
+    if (step >= 5) {
+      clearInterval(interval);
+      saveState();
+      stText.textContent = '✅ All 5 cards successfully issued & added to wallet!';
+      showToast('🎉 Batch issuance complete! 5 cards added.', 'success');
+      addActivity('Batch issued 5 new cards', 'green');
+    }
+  }, 700);
+}
+
+// ══════════════════════════════════════════════
+// PAGE 3: DEVELOPER PORTAL & REST API
+// ══════════════════════════════════════════════
+function buildDeveloperHTML() {
+  return `
+    <div class="inner-page-wrap">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">⚡ Developer Portal &amp; REST API</h2>
+          <p class="section-subtitle">API keys, Webhook endpoints &amp; SDK integration specs</p>
+        </div>
+        <button class="btn-cta" onclick="showToast('🔑 New API Secret Key generated', 'success')"><i class="fa-solid fa-key"></i> Generate Key</button>
+      </div>
+
+      <!-- API Key Card -->
+      <div class="dash-panel" style="margin-bottom:20px;">
+        <div class="dash-panel-title">Production API Key</div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <input class="form-input" style="font-family:monospace;letter-spacing:1px;" value="vkt_live_9f8a3c2b1e4d5a6b7c8d9e0f1a2b3c4d5" readonly/>
+          <button class="card-action-btn primary" onclick="copyToClipboard('vkt_live_9f8a3c2b1e4d5a6b7c8d9e0f1a2b3c4d5')"><i class="fa-solid fa-copy"></i> Copy</button>
+        </div>
+      </div>
+
+      <!-- Code Snippets -->
+      <div class="dash-two-col">
+        <div class="dash-panel">
+          <div class="dash-panel-title">cURL — Issue Card via REST API</div>
+          <pre style="background:var(--bg-base);padding:14px;border-radius:10px;font-size:.78rem;color:var(--accent-cyan);overflow-x:auto;"><code>curl -X POST https://api.vaultid.app/v1/cards \
+  -H "Authorization: Bearer vkt_live_9f8a3..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "holderName": "John Doe",
+    "orgName": "MIT University",
+    "cardType": "Student ID",
+    "role": "Computer Science"
+  }'</code></pre>
+        </div>
+        <div class="dash-panel">
+          <div class="dash-panel-title">JavaScript SDK — Verify NFC Token</div>
+          <pre style="background:var(--bg-base);padding:14px;border-radius:10px;font-size:.78rem;color:var(--accent-green);overflow-x:auto;"><code>import { VaultID } from '@vaultid/sdk';
+
+const client = new VaultID({ apiKey: 'vkt_live_9f8a3...' });
+const result = await client.nfc.verify({
+  token: 'nfc_payload_token_string'
+});
+console.log(result.isValid); // true</code></pre>
+        </div>
+      </div>
+
+      <!-- Webhooks Box -->
+      <div class="dash-panel" style="margin-top:20px;">
+        <div class="dash-panel-title">Webhook Subscriptions</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Webhook URL Endpoint</label>
+            <input class="form-input" value="https://api.youruniversity.edu/webhooks/vaultid"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Subscribed Events</label>
+            <select class="form-select">
+              <option>card.issued, card.revoked, nfc.scanned</option>
+              <option>card.issued only</option>
+              <option>nfc.scanned only</option>
+            </select>
+          </div>
+        </div>
+        <button class="card-action-btn primary" style="margin-top:10px;" onclick="showToast('✅ Webhook endpoint updated!', 'success')">Save Webhook Settings</button>
+      </div>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════
+// PAGE 4: ENTERPRISE SETTINGS & BRANDING
+// ══════════════════════════════════════════════
+function buildSettingsHTML() {
+  return `
+    <div class="inner-page-wrap">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">⚙️ Enterprise Settings &amp; White-Label</h2>
+          <p class="section-subtitle">Custom domains, Single Sign-On (SSO) &amp; email branding</p>
+        </div>
+        <button class="btn-cta" onclick="showToast('💾 Settings saved successfully!', 'success')"><i class="fa-solid fa-floppy-disk"></i> Save Changes</button>
+      </div>
+
+      <div class="dash-two-col">
+        <!-- Branding Settings -->
+        <div class="dash-panel">
+          <div class="dash-panel-title">Organization White-Labeling</div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label class="form-label">Custom Subdomain</label>
+            <input class="form-input" value="id.mit.edu"/>
+          </div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label class="form-label">Primary Brand Color</label>
+            <input type="color" class="form-input" value="#8b5cf6" style="height:42px;padding:4px;cursor:pointer;"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Custom Email Footer Text</label>
+            <input class="form-input" value="Issued by MIT Campus Card Services · All Rights Reserved"/>
+          </div>
+        </div>
+
+        <!-- SSO Settings -->
+        <div class="dash-panel">
+          <div class="dash-panel-title">Single Sign-On (SSO / SAML 2.0)</div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label class="form-label">Identity Provider (IdP) Entity ID</label>
+            <input class="form-input" value="https://idp.university.edu/saml2/idp/metadata.php"/>
+          </div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label class="form-label">SSO Provider Type</label>
+            <select class="form-select">
+              <option>Okta Single Sign-On</option>
+              <option>Microsoft Azure AD / Entra ID</option>
+              <option>Google Workspace SAML</option>
+              <option>Shibboleth / CAS</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
+            <input type="checkbox" id="en-sso" checked style="width:18px;height:18px;accent-color:var(--accent-purple);"/>
+            <label for="en-sso" style="font-size:.85rem;font-weight:600;cursor:pointer;">Enforce SSO for all Organization Admins</label>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════
+// PAGE 5: ANALYTICS & REPORTS
+// ══════════════════════════════════════════════
+function buildAnalyticsHTML() {
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const scanData = [340, 420, 510, 680, 720, 290, 180];
+  const maxScan  = Math.max(...scanData);
+
+  return `
+    <div class="inner-page-wrap">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">📊 Usage &amp; Access Analytics</h2>
+          <p class="section-subtitle">Traffic insights, peak scan hours &amp; card usage metrics</p>
+        </div>
+        <button class="btn-cta" onclick="showToast('📊 Analytics PDF Export generated', 'success')"><i class="fa-solid fa-file-pdf"></i> Export Report</button>
+      </div>
+
+      <!-- KPI Grid -->
+      <div class="dashboard-grid">
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon">📈</div>
+          <div class="dash-stat-value">3,140</div>
+          <div class="dash-stat-label">Weekly NFC Scans</div>
+          <div class="dash-stat-change">↑ 24% vs last week</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon">⚡</div>
+          <div class="dash-stat-value">8:30 AM</div>
+          <div class="dash-stat-label">Peak Access Hour</div>
+          <div class="dash-stat-change">740 scans/hr</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon">📍</div>
+          <div class="dash-stat-value">Main Gate #1</div>
+          <div class="dash-stat-label">Busiest Location</div>
+          <div class="dash-stat-change">48% of total volume</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon">⏱️</div>
+          <div class="dash-stat-value">120 ms</div>
+          <div class="dash-stat-label">Avg Verification Time</div>
+          <div class="dash-stat-change">Sub-second response</div>
+        </div>
+      </div>
+
+      <!-- Scans chart -->
+      <div class="dash-two-col" style="margin-top:20px;">
+        <div class="dash-panel">
+          <div class="dash-panel-title">Daily Scan Volume (Last 7 Days)</div>
+          <div class="revenue-chart">
+            ${days.map((d,i) => `
+              <div class="chart-bar-wrap">
+                <div class="chart-bar" style="height:${Math.round((scanData[i]/maxScan)*100)}%;background:linear-gradient(180deg,var(--accent-cyan),rgba(6,182,212,.3));"></div>
+                <div class="chart-label">${d}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+        <div class="dash-panel">
+          <div class="dash-panel-title">Usage by Device / Platform</div>
+          <div class="plan-breakdown">
+            <div class="plan-row"><div class="plan-row-name">Apple Wallet</div><div class="plan-row-bar-wrap"><div class="plan-row-bar" style="width:62%;background:var(--text-primary);"></div></div><div class="plan-row-val">62%</div></div>
+            <div class="plan-row"><div class="plan-row-name">Google Wallet</div><div class="plan-row-bar-wrap"><div class="plan-row-bar" style="width:28%;background:var(--accent-blue);"></div></div><div class="plan-row-val">28%</div></div>
+            <div class="plan-row"><div class="plan-row-name">PWA / Web</div><div class="plan-row-bar-wrap"><div class="plan-row-bar" style="width:10%;background:var(--accent-purple);"></div></div><div class="plan-row-val">10%</div></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════
+// PAGE 6: MEMBER & CARDHOLDER DIRECTORY
+// ══════════════════════════════════════════════
+function buildDirectoryHTML() {
+  return `
+    <div class="inner-page-wrap">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">👥 Member &amp; Cardholder Directory</h2>
+          <p class="section-subtitle">Manage issued cards, revoke access &amp; resend passes</p>
+        </div>
+        <button class="btn-cta" onclick="openDesigner()"><i class="fa-solid fa-plus"></i> Issue New ID</button>
+      </div>
+
+      <div class="dash-panel">
+        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+          <input class="form-input" style="max-width:300px;" placeholder="🔍 Search name, ID, department..." onkeyup="filterDirectory(this.value)"/>
+          <select class="form-select" style="max-width:180px;">
+            <option>All Organizations</option>
+            <option>MIT University</option>
+            <option>TechCorp Inc.</option>
+            <option>City Hospital</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="sub-table" id="directory-table">
+            <thead>
+              <tr><th>Member Name</th><th>ID Number</th><th>Organization</th><th>Role / Dept</th><th>Issued Date</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              ${state.cards.map(c => `
+                <tr>
+                  <td><strong>${esc(c.holderName)}</strong></td>
+                  <td style="font-family:monospace;">${esc(c.idNumber)}</td>
+                  <td>${esc(c.orgName)}</td>
+                  <td>${esc(c.cardType)} · ${esc(c.role)}</td>
+                  <td style="color:var(--text-muted);">${c.issue || '2024-01-01'}</td>
+                  <td>
+                    <button class="nav-btn" style="padding:4px 10px;font-size:.73rem;" onclick="openWalletShare('${c.id}')"><i class="fa-solid fa-share"></i> Pass</button>
+                    <button class="nav-btn" style="padding:4px 10px;font-size:.73rem;color:#f87171;" onclick="deleteCard('${c.id}')"><i class="fa-solid fa-ban"></i> Revoke</button>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
+function filterDirectory(query) {
+  const rows = document.querySelectorAll('#directory-table tbody tr');
+  const q = query.toLowerCase();
+  rows.forEach(r => {
+    r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+// ══════════════════════════════════════════════
+// PAGE 7: GATES & ACCESS CONTROL
+// ══════════════════════════════════════════════
+function buildGatesHTML() {
+  const gates = [
+    { name: 'Main Campus Gate #1', status: 'Online', battery: '98%', type: 'NFC Turnstile', location: 'North Entrance', online: true },
+    { name: 'Library Entry Turnstile B', status: 'Online', battery: '100%', type: 'QR Reader', location: 'Building A', online: true },
+    { name: 'Server Room Door Gate #4', status: 'Online', battery: '92%', type: 'Biometric + NFC', location: 'Basement Level 2', online: true },
+    { name: 'Gym / Sports Complex Turnstile', status: 'Online', battery: '84%', type: 'NFC Reader', location: 'East Wing', online: true },
+  ];
+
+  return `
+    <div class="inner-page-wrap">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">🚪 Physical Gates &amp; Terminals</h2>
+          <p class="section-subtitle">Monitor turnstiles, readers &amp; remote door unlock relays</p>
+        </div>
+        <button class="btn-cta" onclick="showToast('⚡ All gate relays unlocked for 10s', 'info')"><i class="fa-solid fa-door-open"></i> Unlock All Gates</button>
+      </div>
+
+      <div class="orgs-grid">
+        ${gates.map(g => `
+          <div class="org-card" style="cursor:default;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div class="org-card-icon" style="background:rgba(16,185,129,.15);color:var(--accent-green);margin-bottom:0;">
+                <i class="fa-solid fa-door-closed"></i>
+              </div>
+              <span class="plan-chip" style="background:rgba(16,185,129,.15);color:var(--accent-green);">● ${g.status}</span>
+            </div>
+            <div class="org-card-name">${esc(g.name)}</div>
+            <div class="org-card-type">${esc(g.type)} · ${esc(g.location)}</div>
+            <div style="display:flex;justify-content:space-between;font-size:.76rem;color:var(--text-muted);margin-top:12px;border-top:1px solid var(--border-subtle);padding-top:8px;">
+              <span>Battery: ${g.battery}</span>
+              <a onclick="showToast('🔓 Gate pulse signal sent', 'success')" style="color:var(--accent-cyan);cursor:pointer;font-weight:700;">Unlock Door →</a>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════
+// PAGE 8: BROADCAST NOTIFICATIONS
+// ══════════════════════════════════════════════
+function buildNotificationsHTML() {
+  return `
+    <div class="inner-page-wrap">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">🔔 Broadcast Push Notifications</h2>
+          <p class="section-subtitle">Send urgent pass updates &amp; alerts directly to Apple &amp; Google Wallet</p>
+        </div>
+      </div>
+
+      <div class="dash-panel" style="max-width:600px;margin:0 auto;">
+        <div class="dash-panel-title">Dispatch Wallet Push Notification</div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">Notification Title *</label>
+          <input class="form-input" id="notif-title" placeholder="e.g. Campus Emergency Alert / Event Reminder"/>
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">Message Body *</label>
+          <textarea class="form-input" id="notif-body" rows="4" style="resize:none;" placeholder="Enter message to display on member lock screens..."></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:18px;">
+          <label class="form-label">Target Audience</label>
+          <select class="form-select">
+            <option>All Issued Wallet Cards (Every Member)</option>
+            <option>MIT University Students Only</option>
+            <option>TechCorp Employees Only</option>
+            <option>Hospital Staff Only</option>
+          </select>
+        </div>
+        <button class="btn-submit" onclick="sendBroadcastNotif()"><i class="fa-solid fa-paper-plane"></i> Broadcast Push Notification</button>
+      </div>
+    </div>`;
+}
+
+function sendBroadcastNotif() {
+  const title = document.getElementById('notif-title')?.value.trim();
+  const body  = document.getElementById('notif-body')?.value.trim();
+  if (!title || !body) { showToast('Please enter notification title and message', 'error'); return; }
+  showToast(`🔔 Push sent: "${title}"`, 'success');
+  addActivity(`Broadcast alert sent: ${title}`, 'purple');
+  document.getElementById('notif-title').value = '';
+  document.getElementById('notif-body').value  = '';
+}
+
+
+
+
