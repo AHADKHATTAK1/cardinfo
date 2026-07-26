@@ -474,6 +474,9 @@
         <option value="midnight">🌌 Midnight</option>
         <option value="light">☀️ Light</option>
       </select>
+      <button class="nav-btn" style="background:rgba(139,92,246,.15);border-color:rgba(139,92,246,.3);color:var(--accent-purple);font-weight:700;" onclick="openUserModal()" id="user-profile-topbar">
+        <i class="fa-solid fa-circle-user"></i> <span id="topbar-user-name">Alex Johnson</span>
+      </button>
       <div class="plan-badge-topbar" id="plan-badge-topbar" onclick="openCheckout('pro')">Free</div>
       <button class="btn-cta" onclick="openDesigner()"><i class="fa-solid fa-plus"></i> Add Card</button>
     </div>
@@ -767,6 +770,34 @@
       </div>
 
       <button class="btn-submit" onclick="simulateFaceIdSuccess()" id="faceid-bypass-btn"><i class="fa-solid fa-circle-check"></i> Simulate Match</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+  MULTI-USER ACCOUNT SWITCHER MODAL
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="user-switch-modal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <h2 class="modal-title">👥 Multi-User Account Switcher</h2>
+      <button class="modal-close" onclick="closeModal('user-switch-modal')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:.82rem;color:var(--text-muted);margin-bottom:16px;">Switch between logged-in user accounts or create a new user profile.</div>
+
+      <!-- Accounts list -->
+      <div id="users-account-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;"></div>
+
+      <!-- Add New User Form -->
+      <div class="dash-panel" style="background:var(--bg-glass);">
+        <div class="dash-panel-title">Add / Switch to New User</div>
+        <div class="form-row" style="margin-bottom:10px;">
+          <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="new-user-name" placeholder="e.g. David Miller"/></div>
+          <div class="form-group"><label class="form-label">Organization</label><input class="form-input" id="new-user-org" placeholder="e.g. Oxford Tech"/></div>
+        </div>
+        <button class="btn-submit" onclick="addNewUserAccount()"><i class="fa-solid fa-user-plus"></i> Create &amp; Switch User Profile</button>
+      </div>
     </div>
   </div>
 </div>

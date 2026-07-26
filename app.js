@@ -1914,6 +1914,86 @@ function printCardSheet() {
   win.document.close();
 }
 
+// ══════════════════════════════════════════════
+// MULTI-USER ACCOUNT MANAGEMENT SYSTEM
+// ══════════════════════════════════════════════
+let usersState = [
+  { id: 'u1', name: 'Alex Johnson',    org: 'MIT University',       role: 'Student',      icon: '🎓' },
+  { id: 'u2', name: 'Sarah Chen',      org: 'TechCorp Inc.',        role: 'Senior Eng',   icon: '🏢' },
+  { id: 'u3', name: 'Dr. Malik Patel', org: 'City General Hospital',role: 'Cardiologist', icon: '🏥' },
+  { id: 'u4', name: 'System Admin',    org: 'ETP Platform',         role: 'Administrator',icon: '⚡' },
+];
+let activeUserId = 'u1';
+
+function openUserModal() {
+  renderUsersList();
+  openModal('user-switch-modal');
+}
+
+function renderUsersList() {
+  const container = document.getElementById('users-account-list');
+  if (!container) return;
+
+  container.innerHTML = usersState.map(u => {
+    const isActive = u.id === activeUserId;
+    return `
+      <div class="card-list-item" onclick="switchUserAccount('${u.id}')" style="${isActive ? 'border-color:var(--accent-purple);background:rgba(139,92,246,.12);' : ''}">
+        <div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--accent-purple),var(--accent-blue));display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;color:#fff;">${u.icon}</div>
+        <div class="card-list-info">
+          <div class="card-list-name">${esc(u.name)} ${isActive ? '<span class="plan-chip pro" style="margin-left:6px;font-size:.65rem;">Active Profile</span>' : ''}</div>
+          <div class="card-list-org">${esc(u.org)} · ${esc(u.role)}</div>
+        </div>
+        ${isActive ? '<i class="fa-solid fa-circle-check" style="color:var(--accent-purple);font-size:1.1rem;"></i>' : '<button class="nav-btn" style="padding:4px 10px;font-size:.73rem;">Switch</button>'}
+      </div>`;
+  }).join('');
+}
+
+function switchUserAccount(userId) {
+  const user = usersState.find(u => u.id === userId);
+  if (!user) return;
+
+  activeUserId = userId;
+  const topName = document.getElementById('topbar-user-name');
+  if (topName) topName.textContent = user.name;
+
+  // Filter or highlight cards belonging to this user
+  const userCard = state.cards.find(c => c.holderName.toLowerCase().includes(user.name.split(' ')[0].toLowerCase()));
+  if (userCard) state.selectedCardId = userCard.id;
+
+  closeModal('user-switch-modal');
+  showToast(`👤 Switched account: ${user.name} (${user.org})`, 'success');
+  addActivity(`Switched user profile: ${user.name}`, 'blue');
+
+  if (state.currentPage === 'app') renderInnerPage(state.currentInnerPage);
+}
+
+function addNewUserAccount() {
+  const name = document.getElementById('new-user-name')?.value.trim();
+  const org  = document.getElementById('new-user-org')?.value.trim() || 'Organization';
+  if (!name) { showToast('Please enter member name', 'error'); return; }
+
+  const newUser = {
+    id: uid(), name, org, role: 'Member', icon: '👤'
+  };
+  usersState.push(newUser);
+
+  // Issue card for this new user automatically
+  state.cards.unshift({
+    id: uid(), holderName: name, orgName: org, orgType: 'other',
+    role: 'Member', idNumber: generateId(), cardType: 'Member Card',
+    colorIdx: Math.floor(Math.random() * COLOR_THEMES.length), icon: '👤',
+    logoDataUrl: null, flipped: false, email: '', expiry: '2028-12-31', issue: new Date().toISOString().split('T')[0],
+    website: '', address: '', phone: '', createdAt: new Date().toISOString()
+  });
+
+  document.getElementById('new-user-name').value = '';
+  document.getElementById('new-user-org').value  = '';
+
+  switchUserAccount(newUser.id);
+  saveState();
+}
+
+
 
 
 
