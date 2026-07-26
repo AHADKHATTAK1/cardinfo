@@ -468,6 +468,12 @@
       <button class="nav-btn"        id="dnav-settings"      onclick="appNav('settings')"><i class="fa-solid fa-gear"></i> Settings</button>
     </nav>
     <div class="topbar-actions">
+      <select class="form-select" style="padding:4px 10px;font-size:.78rem;width:auto;cursor:pointer;" onchange="changeTheme(this.value)">
+        <option value="dark">🌙 Dark</option>
+        <option value="neon">⚡ Cyber Neon</option>
+        <option value="midnight">🌌 Midnight</option>
+        <option value="light">☀️ Light</option>
+      </select>
       <div class="plan-badge-topbar" id="plan-badge-topbar" onclick="openCheckout('pro')">Free</div>
       <button class="btn-cta" onclick="openDesigner()"><i class="fa-solid fa-plus"></i> Add Card</button>
     </div>
@@ -732,6 +738,35 @@
         <div class="whb-note">⚠️ Full NFC signing requires the VaultID server. The downloaded pass file shows your card design and QR — perfect for showing at entry points.</div>
       </div>
 
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+  FACEID BIOMETRIC VERIFICATION MODAL
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="faceid-modal">
+  <div class="modal" style="max-width:400px;text-align:center;">
+    <div class="modal-header">
+      <h2 class="modal-title">🔐 Biometric Scan</h2>
+      <button class="modal-close" onclick="closeModal('faceid-modal')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;align-items:center;gap:20px;padding:30px 20px;">
+      
+      <!-- FaceID animation frame -->
+      <div class="faceid-frame">
+        <div class="faceid-corner tl"></div><div class="faceid-corner tr"></div>
+        <div class="faceid-corner bl"></div><div class="faceid-corner br"></div>
+        <div class="faceid-grid-line"></div>
+        <div class="faceid-icon-center" id="faceid-icon"><i class="fa-solid fa-face-smile-beam"></i></div>
+      </div>
+
+      <div>
+        <div style="font-family:'Outfit',sans-serif;font-size:1.15rem;font-weight:800;" id="faceid-status-title">Authenticating FaceID...</div>
+        <div style="font-size:.82rem;color:var(--text-muted);margin-top:4px;" id="faceid-status-sub">Hold device still and look into camera</div>
+      </div>
+
+      <button class="btn-submit" onclick="simulateFaceIdSuccess()" id="faceid-bypass-btn"><i class="fa-solid fa-circle-check"></i> Simulate Match</button>
     </div>
   </div>
 </div>

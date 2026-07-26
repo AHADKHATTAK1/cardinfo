@@ -207,8 +207,10 @@ function buildWalletHTML() {
       ${buildCardHTML(primary, true)}
       <div class="card-actions" style="justify-content:center;flex-wrap:wrap;">
         <button class="card-action-btn primary" onclick="launchDemoScan('${primary.id}')"><i class="fa-solid fa-wifi"></i> NFC Scan</button>
+        <button class="card-action-btn" style="background:rgba(6,182,212,.15);border-color:var(--accent-cyan);color:var(--accent-cyan);" onclick="triggerFaceId('${primary.id}')"><i class="fa-solid fa-face-smile"></i> FaceID Unlock</button>
         <button class="card-action-btn" style="background:linear-gradient(135deg,rgba(0,0,0,.7),rgba(30,30,30,.8));border-color:rgba(255,255,255,.2);color:#fff;" onclick="openWalletShare('${primary.id}')"><i class="fa-brands fa-apple"></i> / <span style="color:#4285f4;font-weight:900;font-size:.8rem;">G</span> Add to Wallet</button>
         <button class="card-action-btn" onclick="flipCard('${primary.id}')"><i class="fa-solid fa-rotate"></i> Flip</button>
+        <button class="card-action-btn" onclick="printCardSheet()"><i class="fa-solid fa-print"></i> Print Sheet</button>
         <button class="card-action-btn" onclick="openCardDetail('${primary.id}')"><i class="fa-solid fa-circle-info"></i> Details</button>
         <button class="card-action-btn danger" onclick="deleteCard('${primary.id}')"><i class="fa-solid fa-trash"></i></button>
       </div>
@@ -1835,6 +1837,83 @@ function sendBroadcastNotif() {
   document.getElementById('notif-title').value = '';
   document.getElementById('notif-body').value  = '';
 }
+
+// ══════════════════════════════════════════════
+// THEME SWITCHER LOGIC
+// ══════════════════════════════════════════════
+function changeTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('vid3_theme', theme);
+  showToast(`🎨 Theme changed: ${theme.toUpperCase()}`, 'info');
+}
+
+// Load saved theme
+(function() {
+  const saved = localStorage.getItem('vid3_theme');
+  if (saved) document.documentElement.setAttribute('data-theme', saved);
+})();
+
+// ══════════════════════════════════════════════
+// FACEID BIOMETRIC VERIFICATION SIMULATOR
+// ══════════════════════════════════════════════
+let _faceIdCardId = null;
+
+function triggerFaceId(cardId) {
+  _faceIdCardId = cardId;
+  const t = document.getElementById('faceid-status-title');
+  const s = document.getElementById('faceid-status-sub');
+  const icon = document.getElementById('faceid-icon');
+  if (t) t.textContent = 'Authenticating FaceID...';
+  if (s) s.textContent = 'Hold device still and look into camera';
+  if (icon) icon.innerHTML = '<i class="fa-solid fa-face-smile-beam"></i>';
+  openModal('faceid-modal');
+
+  setTimeout(simulateFaceIdSuccess, 1800);
+}
+
+function simulateFaceIdSuccess() {
+  const t = document.getElementById('faceid-status-title');
+  const s = document.getElementById('faceid-status-sub');
+  const icon = document.getElementById('faceid-icon');
+  if (t) t.textContent = 'FaceID Verified! ✅';
+  if (s) s.textContent = 'Biometric match 99.8% confirmed';
+  if (icon) icon.innerHTML = '<i class="fa-solid fa-circle-check" style="color:var(--accent-green);"></i>';
+
+  setTimeout(() => {
+    closeModal('faceid-modal');
+    showToast('🔐 Biometric unlock successful!', 'success');
+    if (_faceIdCardId) launchDemoScan(_faceIdCardId);
+  }, 1000);
+}
+
+// ══════════════════════════════════════════════
+// PRINTABLE CARD SHEET GENERATOR
+// ══════════════════════════════════════════════
+function printCardSheet() {
+  if (!state.cards.length) { showToast('No cards to print!', 'error'); return; }
+  const win = window.open('', '_blank');
+  const cardsHtml = state.cards.map(c => `
+    <div style="width:320px;height:190px;border-radius:16px;background:${COLOR_THEMES[c.colorIdx].gradient};color:#fff;padding:16px;box-sizing:border-box;margin:10px;display:inline-block;vertical-align:top;font-family:sans-serif;box-shadow:0 4px 12px rgba(0,0,0,0.3);position:relative;">
+      <div style="font-size:1.2rem;margin-bottom:10px;">${c.icon} <strong style="font-size:.9rem;float:right;">${c.orgName}</strong></div>
+      <div style="font-size:1.1rem;font-weight:bold;margin-bottom:4px;">${c.holderName}</div>
+      <div style="font-size:.78rem;opacity:0.8;">${c.cardType} · ${c.role}</div>
+      <div style="position:absolute;bottom:14px;left:16px;font-family:monospace;font-size:.75rem;opacity:0.6;">ID: ${c.idNumber}</div>
+      <div style="position:absolute;bottom:14px;right:16px;font-size:.65rem;opacity:0.5;">VaultID</div>
+    </div>`).join('');
+
+  win.document.write(`
+    <html>
+      <head><title>VaultID — Printable ID Cards Sheet</title></head>
+      <body onload="window.print()" style="background:#fff;padding:20px;font-family:sans-serif;">
+        <h2 style="color:#1e1b4b;">VaultID — Physical Card Sheet (${state.cards.length} Cards)</h2>
+        <p style="color:#666;font-size:14px;">Cut along edges for physical backup cards.</p>
+        <hr style="margin-bottom:20px;"/>
+        ${cardsHtml}
+      </body>
+    </html>`);
+  win.document.close();
+}
+
 
 
 

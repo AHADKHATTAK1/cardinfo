@@ -811,4 +811,78 @@ a{color:inherit;text-decoration:none;}
 .faq-answer { display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle);color:var(--text-secondary);font-size:.86rem;line-height:1.7; }
 .faq-item.open .faq-answer { display:block;animation:fadeDown .3s ease; }
 
+/* ══════════════════════════════════════════════
+   THEMES SYSTEM
+══════════════════════════════════════════════ */
+
+/* Cyber Neon Theme */
+[data-theme="neon"] {
+  --bg-base:        #050814;
+  --bg-surface:     #0b10215;
+  --bg-elevated:    #121936;
+  --accent-purple:  #d946ef;
+  --accent-blue:    #06b6d4;
+  --accent-cyan:    #22d3ee;
+  --text-primary:   #f4f4f5;
+  --border-mid:     rgba(217,70,239,0.3);
+}
+
+/* Midnight Theme */
+[data-theme="midnight"] {
+  --bg-base:        #000000;
+  --bg-surface:     #09090b;
+  --bg-elevated:    #18181b;
+  --accent-purple:  #6366f1;
+  --accent-blue:    #3b82f6;
+  --border-mid:     rgba(255,255,255,0.15);
+}
+
+/* Clean Light Theme */
+[data-theme="light"] {
+  --bg-base:        #f8fafc;
+  --bg-surface:     #ffffff;
+  --bg-elevated:    #f1f5f9;
+  --bg-glass:       rgba(0,0,0,0.03);
+  --bg-glass-hover: rgba(0,0,0,0.06);
+  --border-subtle:  rgba(0,0,0,0.08);
+  --border-mid:     rgba(0,0,0,0.15);
+  --border-bright:  rgba(0,0,0,0.25);
+  --text-primary:   #0f172a;
+  --text-secondary: #334155;
+  --text-muted:     #64748b;
+}
+
+/* ══════════════════════════════════════════════
+   FACEID BIOMETRIC SCANNER STYLES
+══════════════════════════════════════════════ */
+.faceid-frame {
+  width:160px;height:160px;
+  border-radius:32px;
+  border:2px dashed var(--accent-cyan);
+  position:relative;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(6,182,212,.05);
+}
+.faceid-corner { position:absolute;width:18px;height:18px;border-color:var(--accent-cyan);border-style:solid; }
+.faceid-corner.tl { top:-2px;left:-2px;border-width:3px 0 0 3px;border-radius:8px 0 0 0; }
+.faceid-corner.tr { top:-2px;right:-2px;border-width:3px 3px 0 0;border-radius:0 8px 0 0; }
+.faceid-corner.bl { bottom:-2px;left:-2px;border-width:0 0 3px 3px;border-radius:0 0 0 8px; }
+.faceid-corner.br { bottom:-2px;right:-2px;border-width:0 3px 3px 0;border-radius:0 0 8px 0; }
+
+.faceid-grid-line {
+  position:absolute;left:8px;right:8px;height:2px;
+  background:linear-gradient(90deg,transparent,var(--accent-cyan),transparent);
+  animation:faceidScan 2s ease-in-out infinite;
+  box-shadow:0 0 12px var(--accent-cyan);
+}
+@keyframes faceidScan { 0%{top:14px;} 50%{top:calc(100% - 16px);} 100%{top:14px;} }
+
+.faceid-icon-center {
+  font-size:3.5rem;color:var(--accent-cyan);
+  filter:drop-shadow(0 0 20px rgba(6,182,212,.5));
+  animation:faceidPulse 1.8s ease-in-out infinite;
+}
+@keyframes faceidPulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.1);color:var(--accent-green);} }
+
+
 
