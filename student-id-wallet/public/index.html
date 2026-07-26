@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ur-Latn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student ID — Add to Wallet</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,600;1,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:#0F1720; font-family:'Inter',sans-serif; padding:20px;
+  }
+  .id-card{
+    width:100%; max-width:360px; border-radius:16px; overflow:hidden;
+    background: linear-gradient(160deg, #14213D, #1F3A5F);
+    color:#fff; box-shadow:0 20px 50px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.08);
+  }
+  .id-top{ padding:20px 22px 16px; border-bottom:1px solid rgba(255,255,255,0.12); }
+  .college{ font-size:11px; letter-spacing:2px; text-transform:uppercase; color:#C9A227; }
+  .id-name{ font-family:'Fraunces', serif; font-style:italic; font-size:24px; margin-top:6px; }
+  .id-body{ padding:16px 22px; display:flex; flex-direction:column; gap:10px; }
+  .id-row{ display:flex; justify-content:space-between; font-size:13px; }
+  .id-row span:first-child{ color:rgba(255,255,255,0.55); }
+  .id-row span:last-child{ font-family:'JetBrains Mono', monospace; }
+  .id-foot{ padding:16px 22px 22px; display:flex; flex-direction:column; gap:10px; }
+  .wallet-btn{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    padding:12px; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer;
+    text-decoration:none; border:none;
+  }
+  .apple-btn{ background:#000; color:#fff; }
+  .google-btn{ background:#fff; color:#1F1F1F; }
+  .note{ text-align:center; color:rgba(255,255,255,0.4); font-size:11.5px; margin-top:4px; }
+</style>
+</head>
+<body>
+  <div class="id-card" id="card">
+    <div class="id-top">
+      <div class="college">Your College Name</div>
+      <div class="id-name" id="sName">Loading…</div>
+    </div>
+    <div class="id-body">
+      <div class="id-row"><span>Roll No</span><span id="sRoll">—</span></div>
+      <div class="id-row"><span>Department</span><span id="sDept">—</span></div>
+      <div class="id-row"><span>Valid Until</span><span id="sValid">—</span></div>
+    </div>
+    <div class="id-foot">
+      <a class="wallet-btn apple-btn" id="appleBtn" href="#">📱 Add to Apple Wallet</a>
+      <a class="wallet-btn google-btn" id="googleBtn" href="#">Add to Google Wallet</a>
+      <div class="note">Ye asal pass sirf tab banega jab server pe Apple/Google certificates set hon.</div>
+    </div>
+  </div>
+
+<script>
+  const studentId = window.location.pathname.split('/').pop();
+  fetch(`/api/student/${studentId}`)
+    .then(r => r.json())
+    .then(s => {
+      document.getElementById('sName').textContent = s.name || 'Student';
+      document.getElementById('sRoll').textContent = s.rollNumber || '—';
+      document.getElementById('sDept').textContent = s.department || '—';
+      document.getElementById('sValid').textContent = s.validUntil || '—';
+    })
+    .catch(() => { document.getElementById('sName').textContent = 'Student nahi mila'; });
+
+  document.getElementById('appleBtn').href = `/wallet/apple/${studentId}`;
+  document.getElementById('googleBtn').href = `/wallet/google/${studentId}`;
+</script>
+</body>
+</html>

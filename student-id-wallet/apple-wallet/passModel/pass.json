@@ -1,0 +1,30 @@
+{
+  "formatVersion": 1,
+  "passTypeIdentifier": "pass.com.yourcollege.studentid",
+  "teamIdentifier": "YOUR_APPLE_TEAM_ID",
+  "organizationName": "Your College Name",
+  "description": "Student ID Card",
+  "serialNumber": "PLACEHOLDER",
+  "backgroundColor": "rgb(31,42,36)",
+  "foregroundColor": "rgb(224,188,74)",
+  "labelColor": "rgb(224,188,74)",
+  "generic": {
+    "primaryFields": [
+      { "key": "name", "label": "STUDENT", "value": "PLACEHOLDER" }
+    ],
+    "secondaryFields": [
+      { "key": "rollNumber", "label": "ROLL NO", "value": "PLACEHOLDER" },
+      { "key": "department", "label": "DEPARTMENT", "value": "PLACEHOLDER" }
+    ],
+    "auxiliaryFields": [
+      { "key": "validUntil", "label": "VALID UNTIL", "value": "PLACEHOLDER" }
+    ]
+  },
+  "barcodes": [
+    {
+      "message": "PLACEHOLDER",
+      "format": "PKBarcodeFormatQR",
+      "messageEncoding": "iso-8859-1"
+    }
+  ]
+}
