@@ -1993,6 +1993,72 @@ function addNewUserAccount() {
   saveState();
 }
 
+// ══════════════════════════════════════════════
+// UNIVERSAL COMMAND PALETTE & SEARCH
+// ══════════════════════════════════════════════
+function openCommandPalette() {
+  const inp = document.getElementById('cmd-search-input');
+  if (inp) { inp.value = ''; }
+  runCommandSearch('');
+  openModal('cmd-palette-modal');
+  setTimeout(() => inp?.focus(), 100);
+}
+
+function runCommandSearch(query) {
+  const container = document.getElementById('cmd-search-results');
+  if (!container) return;
+
+  const q = (query || '').toLowerCase().trim();
+
+  // Search across pages, cards, and quick actions
+  const items = [];
+
+  // Page quick links
+  ALL_PAGES.forEach(p => {
+    if (!q || p.includes(q)) {
+      items.push({
+        title: `Go to ${p.charAt(0).toUpperCase() + p.slice(1)} Page`,
+        sub: `Navigate directly to ${p} dashboard`,
+        icon: '🔗',
+        action: () => { closeModal('cmd-palette-modal'); appNav(p); }
+      });
+    }
+  });
+
+  // Cards search
+  state.cards.forEach(c => {
+    if (!q || c.holderName.toLowerCase().includes(q) || c.orgName.toLowerCase().includes(q) || c.idNumber.toLowerCase().includes(q)) {
+      items.push({
+        title: `${c.holderName} (${c.idNumber})`,
+        sub: `${c.orgName} · ${c.cardType}`,
+        icon: c.icon,
+        action: () => { closeModal('cmd-palette-modal'); selectCard(c.id); appNav('wallet'); }
+      });
+    }
+  });
+
+  container.innerHTML = items.slice(0, 8).map((item, idx) => `
+    <div class="card-list-item" onclick="window._cmdItems[${idx}].action()">
+      <div style="width:36px;height:36px;border-radius:10px;background:rgba(139,92,246,.15);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">${item.icon}</div>
+      <div class="card-list-info">
+        <div class="card-list-name">${esc(item.title)}</div>
+        <div class="card-list-org">${esc(item.sub)}</div>
+      </div>
+      <div class="card-list-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+    </div>`).join('') || `<div style="text-align:center;color:var(--text-muted);padding:20px;">No results matching "${esc(query)}"</div>`;
+
+  window._cmdItems = items;
+}
+
+// Ctrl + / Hotkey listener
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+    e.preventDefault();
+    openCommandPalette();
+  }
+});
+
+
 
 
 

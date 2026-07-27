@@ -468,6 +468,9 @@
       <button class="nav-btn"        id="dnav-settings"      onclick="appNav('settings')"><i class="fa-solid fa-gear"></i> Settings</button>
     </nav>
     <div class="topbar-actions">
+      <button class="nav-btn" style="background:var(--bg-glass);border-color:var(--border-mid);font-size:.78rem;" onclick="openCommandPalette()">
+        <i class="fa-solid fa-magnifying-glass"></i> Search <span style="font-size:.65rem;opacity:.6;padding:2px 5px;background:var(--bg-elevated);border-radius:4px;margin-left:4px;">Ctrl /</span>
+      </button>
       <select class="form-select" style="padding:4px 10px;font-size:.78rem;width:auto;cursor:pointer;" onchange="changeTheme(this.value)">
         <option value="dark">🌙 Dark</option>
         <option value="neon">⚡ Cyber Neon</option>
@@ -798,6 +801,25 @@
         </div>
         <button class="btn-submit" onclick="addNewUserAccount()"><i class="fa-solid fa-user-plus"></i> Create &amp; Switch User Profile</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+  COMMAND PALETTE / UNIVERSAL SEARCH MODAL
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="cmd-palette-modal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <h2 class="modal-title">⚡ Universal Command Palette</h2>
+      <button class="modal-close" onclick="closeModal('cmd-palette-modal')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <div style="position:relative;margin-bottom:16px;">
+        <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-muted);"></i>
+        <input class="form-input" id="cmd-search-input" style="padding-left:42px;font-size:1rem;" placeholder="Search cards, members, gates, audit logs, or pages..." onkeyup="runCommandSearch(this.value)"/>
+      </div>
+      <div id="cmd-search-results" style="display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;"></div>
     </div>
   </div>
 </div>
