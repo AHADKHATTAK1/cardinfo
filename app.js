@@ -2049,18 +2049,373 @@ function runCommandSearch(query) {
 
   window._cmdItems = items;
 }
+// ══════════════════════════════════════════════════════════════════
+//  ADVANCED FEATURES MODULE
+// ══════════════════════════════════════════════════════════════════
 
-// Ctrl + / Hotkey listener
-document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === '/') {
-    e.preventDefault();
-    openCommandPalette();
+// ── LIVE ACTIVITY TICKER ─────────────────────────────────────────
+const TICKER_EVENTS = [
+  '🔐 NFC Verified · Alex Johnson · Main Gate #1',
+  '📦 5 Cards Bulk Issued · MIT University',
+  '🏥 Dr. Patel pass exported · Apple Wallet',
+  '⚠️ Expiry Warning · Card EMP-00142 (7 days left)',
+  '🟢 Gate Relay Online · Library Turnstile B',
+  '🔑 New card issued · Sarah O\'Brien · Hospital ID',
+  '📊 Revenue report generated · Q4 2024',
+  '🌍 Card verified · 192.168.1.102 · London, UK',
+  '🛡️ Security scan passed · VaultID v3.2',
+  '🎓 Bulk enroll complete · 14 students · CS Dept',
+];
+let _tickerIdx = 0;
+function startLiveTicker() {
+  const track = document.getElementById('ticker-track');
+  if (!track) return;
+  function nextTick() {
+    const spans = track.querySelectorAll('.ticker-item');
+    spans.forEach(s => s.style.opacity = '0');
+    setTimeout(() => {
+      track.innerHTML = '';
+      for (let i = 0; i < 3; i++) {
+        const s = document.createElement('span');
+        s.className = 'ticker-item';
+        s.textContent = TICKER_EVENTS[(_tickerIdx + i) % TICKER_EVENTS.length];
+        track.appendChild(s);
+      }
+      _tickerIdx = (_tickerIdx + 1) % TICKER_EVENTS.length;
+    }, 200);
+  }
+  setInterval(nextTick, 3500);
+  // Inject real-time events when user scans
+  window._tickerPush = (msg) => {
+    TICKER_EVENTS.unshift(msg);
+    if (TICKER_EVENTS.length > 30) TICKER_EVENTS.pop();
+  };
+}
+document.addEventListener('DOMContentLoaded', () => setTimeout(startLiveTicker, 500));
+
+// ── EXPIRY ALERT SYSTEM ──────────────────────────────────────────
+function checkExpiryAlerts() {
+  const now = Date.now();
+  const WARN_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+  const expiring = state.cards.filter(c => {
+    if (!c.expiry) return false;
+    const exp = new Date(c.expiry).getTime();
+    return exp - now < WARN_MS && exp > now;
+  });
+  const expired = state.cards.filter(c => {
+    if (!c.expiry) return false;
+    return new Date(c.expiry).getTime() < now;
+  });
+  const badge = document.getElementById('expiry-badge');
+  const total = expiring.length + expired.length;
+  if (badge) {
+    if (total > 0) {
+      badge.style.display = 'flex';
+      badge.textContent = total;
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+  return { expiring, expired };
+}
+setInterval(checkExpiryAlerts, 60000);
+document.addEventListener('DOMContentLoaded', () => setTimeout(checkExpiryAlerts, 1000));
+
+function openExpiryAlerts() {
+  const { expiring, expired } = checkExpiryAlerts();
+  const list = document.getElementById('expiry-list');
+  if (!list) return;
+  const now = Date.now();
+  const fmt = d => {
+    const ms = new Date(d).getTime() - now;
+    const days = Math.ceil(ms / 86400000);
+    if (days < 0) return `Expired ${Math.abs(days)} days ago`;
+    return `Expires in ${days} day${days === 1 ? '' : 's'}`;
+  };
+  const cards = [...expired.map(c => ({ ...c, _status: 'expired' })), ...expiring.map(c => ({ ...c, _status: 'expiring' }))];
+  if (cards.length === 0) {
+    list.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text-muted);">
+      <i class="fa-solid fa-circle-check" style="font-size:2rem;color:#22c55e;display:block;margin-bottom:12px;"></i>
+      All cards are valid. No alerts.
+    </div>`;
+  } else {
+    list.innerHTML = cards.map(c => {
+      const isExp = c._status === 'expired';
+      return `<div style="background:${isExp ? 'rgba(239,68,68,.08)' : 'rgba(251,191,36,.08)'};border:1px solid ${isExp ? 'rgba(239,68,68,.25)' : 'rgba(251,191,36,.25)'};border-radius:12px;padding:14px;display:flex;align-items:center;gap:14px;">
+        <div style="font-size:2rem;">${c.icon || '🪪'}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(c.name)}</div>
+          <div style="font-size:.82rem;color:var(--text-muted);">${esc(c.org)} · ${esc(c.idNumber)}</div>
+          <div style="font-size:.82rem;margin-top:4px;font-weight:600;color:${isExp ? '#f87171' : '#fbbf24'};">${fmt(c.expiry)}</div>
+        </div>
+        <button class="qs-chip" onclick="renewCard('${esc(c.id)}');closeModal('expiry-modal');">Renew</button>
+      </div>`;
+    }).join('');
+  }
+  openModal('expiry-modal');
+}
+
+function renewCard(id) {
+  const card = state.cards.find(c => c.id === id);
+  if (!card) return;
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  card.expiry = d.toISOString().split('T')[0];
+  saveState();
+  renderWallet();
+  checkExpiryAlerts();
+  showToast('✅ Card renewed for 1 year', 'success');
+  if (window._tickerPush) _tickerPush(`🔄 Card renewed · ${card.name} · ${card.org}`);
+}
+
+// ── QR SCANNER SIMULATOR ─────────────────────────────────────────
+const QR_DB = {
+  'MIT-2024-4872': { name: 'Alex Johnson', org: 'MIT University', role: 'Graduate Student', dept: 'Computer Science', icon: '🎓', status: 'valid', expires: '2025-06-30' },
+  'EMP-00142':     { name: 'Sarah Mitchell', org: 'TechCorp Inc.', role: 'Senior Engineer', dept: 'R&D Division', icon: '🏢', status: 'expiring', expires: '2025-02-15' },
+  'DOC-2019-007':  { name: 'Dr. Raj Patel', org: 'City General Hospital', role: 'Chief of Surgery', dept: 'Cardiology', icon: '🏥', status: 'valid', expires: '2026-12-31' },
+};
+function openQRScannerModal() {
+  const res = document.getElementById('qr-scan-result');
+  if (res) { res.style.display = 'none'; res.innerHTML = ''; }
+  openModal('qr-scan-modal');
+}
+function simulateQRScan(id) {
+  const res = document.getElementById('qr-scan-result');
+  if (!res) return;
+  res.style.display = 'block';
+  res.innerHTML = `<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:.82rem;"><i class="fa-solid fa-spinner fa-spin"></i> Scanning...</div>`;
+  setTimeout(() => {
+    const rec = QR_DB[id];
+    if (!rec) {
+      res.innerHTML = `<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:12px;padding:16px;color:#f87171;"><i class="fa-solid fa-circle-xmark"></i> ID not found in VaultID registry.</div>`;
+      return;
+    }
+    const statusColor = rec.status === 'valid' ? '#22c55e' : '#fbbf24';
+    const statusLabel = rec.status === 'valid' ? '✅ VERIFIED' : '⚠️ EXPIRING SOON';
+    res.innerHTML = `
+      <div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:14px;padding:18px;text-align:left;">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+          <div style="font-size:2.5rem;">${rec.icon}</div>
+          <div>
+            <div style="font-size:1.1rem;font-weight:800;color:var(--text-primary);">${esc(rec.name)}</div>
+            <div style="font-size:.82rem;color:var(--text-muted);">${esc(rec.role)} · ${esc(rec.dept)}</div>
+            <div style="font-size:.82rem;color:var(--text-muted);">${esc(rec.org)}</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div style="font-size:.8rem;color:var(--text-muted);">Card ID: <strong style="color:var(--text-primary);">${esc(id)}</strong></div>
+          <div style="font-size:.8rem;color:var(--text-muted);">Expires: <strong>${esc(rec.expires)}</strong></div>
+        </div>
+        <div style="margin-top:12px;font-weight:800;font-size:.88rem;color:${statusColor};">${statusLabel}</div>
+      </div>`;
+    if (window._tickerPush) _tickerPush(`📷 QR Verified · ${rec.name} · ${rec.org}`);
+  }, 1200);
+}
+
+// ── MULTI-LANGUAGE ENGINE ─────────────────────────────────────────
+const TRANSLATIONS = {
+  en: {
+    wallet: 'Wallet', scan: 'NFC Scan', orgs: 'Orgs', revenue: 'Revenue',
+    analytics: 'Analytics', directory: 'Directory', gates: 'Gates',
+    security: 'Security', bulk: 'Bulk Issue', alerts: 'Alerts',
+    api: 'API', settings: 'Settings', addCard: 'Add Card',
+    searchPlaceholder: 'Search cards, members, gates...',
+    greeting: 'Welcome back',
+  },
+  ur: {
+    wallet: 'بٹوہ', scan: 'این ایف سی اسکین', orgs: 'ادارے', revenue: 'آمدنی',
+    analytics: 'تجزیات', directory: 'فہرست', gates: 'دروازے',
+    security: 'سیکیورٹی', bulk: 'بلک جاری', alerts: 'انتباہات',
+    api: 'API', settings: 'ترتیبات', addCard: 'کارڈ شامل کریں',
+    searchPlaceholder: 'کارڈ، اراکین، دروازے تلاش کریں...',
+    greeting: 'خوش آمدید',
+  },
+  ar: {
+    wallet: 'المحفظة', scan: 'مسح NFC', orgs: 'المؤسسات', revenue: 'الإيرادات',
+    analytics: 'التحليلات', directory: 'الدليل', gates: 'البوابات',
+    security: 'الأمان', bulk: 'إصدار مجمع', alerts: 'التنبيهات',
+    api: 'API', settings: 'الإعدادات', addCard: 'إضافة بطاقة',
+    searchPlaceholder: 'البحث في البطاقات والأعضاء...',
+    greeting: 'مرحباً بعودتك',
+  },
+};
+let _currentLang = 'en';
+function switchLanguage(lang) {
+  _currentLang = lang;
+  const T = TRANSLATIONS[lang] || TRANSLATIONS.en;
+  const isRTL = lang === 'ar' || lang === 'ur';
+  document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
+  document.documentElement.lang = lang;
+  // Nav labels
+  const map = {
+    'dnav-wallet': T.wallet, 'dnav-scan': T.scan, 'dnav-orgs': T.orgs,
+    'dnav-dashboard': T.revenue, 'dnav-analytics': T.analytics,
+    'dnav-directory': T.directory, 'dnav-gates': T.gates,
+    'dnav-security': T.security, 'dnav-batch': T.bulk,
+    'dnav-notifications': T.alerts, 'dnav-developer': T.api,
+    'dnav-settings': T.settings,
+  };
+  Object.entries(map).forEach(([id, label]) => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = el.innerHTML.replace(/>[^<]+<\/button>/, `>${label}</button>`).replace(/>([^<]*)<\/button>$/, `>${label}</button>`);
+  });
+  localStorage.setItem('vid3_lang', lang);
+  showToast(`🌍 Language switched · ${lang.toUpperCase()}`, 'success');
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const savedLang = localStorage.getItem('vid3_lang');
+  if (savedLang && TRANSLATIONS[savedLang]) {
+    document.getElementById('lang-select') && (document.getElementById('lang-select').value = savedLang);
+    switchLanguage(savedLang);
   }
 });
 
+// ── PDF EXPORT ───────────────────────────────────────────────────
+function openPDFExport() { openModal('pdf-modal'); }
+function generatePDFExport() {
+  const format = document.getElementById('pdf-format')?.value || 'all';
+  const size = document.getElementById('pdf-size')?.value || 'a4';
+  const cards = format === 'selected'
+    ? state.cards.filter(c => c.id === state.selectedCardId)
+    : state.cards;
+  if (!cards.length) { showToast('No cards to export', 'error'); return; }
 
+  const rowH = 140, rowW = 560, perPage = 4;
+  let svgCards = cards.slice(0, 16).map((c, i) => {
+    const g = COLOR_THEMES[c.colorIdx] || COLOR_THEMES[0];
+    return `<rect x="20" y="${20 + (i % perPage) * (rowH + 20)}" width="${rowW}" height="${rowH}" rx="18" fill="url(#g${i})"/>
+    <defs><linearGradient id="g${i}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${g.swatch}"/>
+      <stop offset="100%" stop-color="${g.swatch}88"/>
+    </linearGradient></defs>
+    <text x="80" y="${55 + (i % perPage) * (rowH + 20)}" font-family="Arial" font-size="28" fill="white" font-weight="bold">${esc(c.icon||'🪪')}</text>
+    <text x="120" y="${55 + (i % perPage) * (rowH + 20)}" font-family="Arial" font-size="16" fill="white" font-weight="bold">${esc(c.name)}</text>
+    <text x="120" y="${78 + (i % perPage) * (rowH + 20)}" font-family="Arial" font-size="12" fill="rgba(255,255,255,.75)">${esc(c.org)}</text>
+    <text x="120" y="${98 + (i % perPage) * (rowH + 20)}" font-family="Arial" font-size="12" fill="rgba(255,255,255,.75)">${esc(c.role)} · ${esc(c.idNumber)}</text>
+    <text x="120" y="${118 + (i % perPage) * (rowH + 20)}" font-family="Arial" font-size="11" fill="rgba(255,255,255,.5)">Exp: ${esc(c.expiry||'N/A')}</text>
+    <text x="540" y="${140 + (i % perPage) * (rowH + 20)}" font-family="Arial" font-size="10" fill="rgba(255,255,255,.4)" text-anchor="end">VaultID · ETP</text>`;
+  }).join('');
 
+  const svgH = Math.min(cards.length, perPage) * (rowH + 20) + 40;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="${svgH}" viewBox="0 0 600 ${svgH}">
+    <rect width="600" height="${svgH}" fill="#0f172a" rx="8"/>
+    ${svgCards}
+  </svg>`;
 
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `VaultID-export-${Date.now()}.svg`;
+  a.click(); URL.revokeObjectURL(url);
+  closeModal('pdf-modal');
+  showToast('📄 Cards exported as SVG', 'success');
+  if (window._tickerPush) _tickerPush(`📄 ${cards.length} cards exported · PDF/SVG`);
+}
+
+// ── ACTIVITY HEATMAP (for Analytics page) ────────────────────────
+function renderActivityHeatmap(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const weeks = 12, days = 7;
+  let cells = '';
+  for (let w = 0; w < weeks; w++) {
+    for (let d = 0; d < days; d++) {
+      const val = Math.random();
+      const opacity = val < 0.2 ? 0.06 : val < 0.5 ? 0.25 : val < 0.8 ? 0.55 : 1;
+      const color = `rgba(139,92,246,${opacity})`;
+      cells += `<div title="${Math.round(val*20)} scans" style="width:16px;height:16px;background:${color};border-radius:3px;cursor:default;" class="hm-cell"></div>`;
+    }
+  }
+  el.innerHTML = `
+    <div style="display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;">
+      ${Array.from({length:weeks}).map((_, w) =>
+        `<div style="display:flex;flex-direction:column;gap:4px;">
+          ${Array.from({length:days}).map((_, d) => {
+            const v = Math.random();
+            const op = v < .2 ? .06 : v < .5 ? .25 : v < .8 ? .55 : 1;
+            return `<div style="width:14px;height:14px;background:rgba(139,92,246,${op});border-radius:3px;" title="${Math.round(v*20)} scans"></div>`;
+          }).join('')}
+        </div>`
+      ).join('')}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:.72rem;color:var(--text-muted);">
+      Less <div style="width:10px;height:10px;background:rgba(139,92,246,.06);border-radius:2px;"></div>
+      <div style="width:10px;height:10px;background:rgba(139,92,246,.25);border-radius:2px;"></div>
+      <div style="width:10px;height:10px;background:rgba(139,92,246,.55);border-radius:2px;"></div>
+      <div style="width:10px;height:10px;background:rgba(139,92,246,1);border-radius:2px;"></div>
+      More
+    </div>`;
+}
+
+// ── ANIMATED STAT COUNTER ────────────────────────────────────────
+function animateCounter(el, target, suffix = '') {
+  if (!el) return;
+  const dur = 1200, step = 16;
+  const steps = dur / step;
+  let cur = 0;
+  const inc = target / steps;
+  const timer = setInterval(() => {
+    cur = Math.min(cur + inc, target);
+    el.textContent = Math.floor(cur).toLocaleString() + suffix;
+    if (cur >= target) clearInterval(timer);
+  }, step);
+}
+
+// ── WALLET QUICK STATS RIBBON ─────────────────────────────────────
+function renderStatsRibbon(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const total = state.cards.length;
+  const { expiring, expired } = checkExpiryAlerts();
+  const scans = state.scanCount;
+  const orgs = [...new Set(state.cards.map(c => c.org))].length;
+  el.innerHTML = `
+    <div class="stats-ribbon">
+      <div class="stat-chip" onclick="appNav('wallet')">
+        <div class="stat-chip-val" id="sc-total">0</div>
+        <div class="stat-chip-lbl">Total Cards</div>
+      </div>
+      <div class="stat-chip" onclick="appNav('scan')">
+        <div class="stat-chip-val" id="sc-scans">0</div>
+        <div class="stat-chip-lbl">NFC Scans</div>
+      </div>
+      <div class="stat-chip" onclick="appNav('orgs')">
+        <div class="stat-chip-val" id="sc-orgs">0</div>
+        <div class="stat-chip-lbl">Organisations</div>
+      </div>
+      <div class="stat-chip ${expiring.length+expired.length > 0 ? 'stat-chip-warn' : ''}" onclick="openExpiryAlerts()">
+        <div class="stat-chip-val" id="sc-expiring">0</div>
+        <div class="stat-chip-lbl">Need Renewal</div>
+      </div>
+    </div>`;
+  setTimeout(() => {
+    animateCounter(document.getElementById('sc-total'), total);
+    animateCounter(document.getElementById('sc-scans'), scans);
+    animateCounter(document.getElementById('sc-orgs'), orgs);
+    animateCounter(document.getElementById('sc-expiring'), expiring.length + expired.length);
+  }, 100);
+}
+
+// ── PUSH PDF BUTTON INTO WALLET HEADER ──────────────────────────
+function injectWalletActions() {
+  const hdr = document.getElementById('wallet-actions-row');
+  if (hdr && !document.getElementById('pdf-export-btn')) {
+    const btn = document.createElement('button');
+    btn.id = 'pdf-export-btn';
+    btn.className = 'nav-btn';
+    btn.style.cssText = 'font-size:.78rem;';
+    btn.innerHTML = '<i class="fa-solid fa-file-export"></i> Export PDF';
+    btn.onclick = openPDFExport;
+    hdr.appendChild(btn);
+  }
+}
+
+// ── KEYBOARD SHORTCUT ADDITIONS ──────────────────────────────────
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'e') { e.preventDefault(); openPDFExport(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'q') { e.preventDefault(); openQRScannerModal(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'j') { e.preventDefault(); openExpiryAlerts(); }
+});
 
 
 
